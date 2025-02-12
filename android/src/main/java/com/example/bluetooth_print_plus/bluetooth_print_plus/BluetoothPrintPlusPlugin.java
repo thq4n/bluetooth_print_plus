@@ -255,7 +255,6 @@ public class BluetoothPrintPlusPlugin
                 result.success(BPPState.BlueOn.getValue());
                 break;
             default:
-                result.success(BPPState.Unknown.getValue());
                 break;
         }
     } catch (SecurityException e) {
