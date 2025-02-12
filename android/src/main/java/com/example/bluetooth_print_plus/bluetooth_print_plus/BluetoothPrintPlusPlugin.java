@@ -357,20 +357,20 @@ public class BluetoothPrintPlusPlugin
     LogUtils.d(TAG, result ? "发送成功": "发送失败");
     return result;
   }
+
   @Override
   public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     LogUtils.d(TAG, "onRequestPermissionsResult");
     if (requestCode == REQUEST_LOCATION_PERMISSIONS) {
-        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-          startScan();
-        } else {
-           if (pendingResult != null) {
+      if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        startScan();
+      } else {
+        if (pendingResult != null) {
             pendingResult.error("no_permissions", "Plugin này yêu cầu quyền truy cập vị trí để quét", null);
             pendingResult = null;
-           }
         }
-        return true;
-      } 
+      }
+      return true;
     }
     return false;
   }
