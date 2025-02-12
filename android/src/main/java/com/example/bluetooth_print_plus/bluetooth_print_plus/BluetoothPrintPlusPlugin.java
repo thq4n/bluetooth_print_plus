@@ -145,14 +145,26 @@ public class BluetoothPrintPlusPlugin
 
   private void tearDown() {
     LogUtils.i(TAG, "teardown");
-    context.unregisterReceiver(mFindBlueToothReceiver);
+    if (context != null) {
+        try {
+            context.unregisterReceiver(mFindBlueToothReceiver);
+        } catch (IllegalArgumentException e) {
+            LogUtils.e(TAG, "Receiver not registered: " + e.getMessage());
+        }
+    }
     context = null;
-    activityBinding.removeRequestPermissionsResultListener(this);
-    activityBinding = null;
-    channel.setMethodCallHandler(null);
-    channel = null;
-    stateChannel.setStreamHandler(null);
-    stateChannel = null;
+    if (activityBinding != null) {
+        activityBinding.removeRequestPermissionsResultListener(this);
+        activityBinding = null;
+    }
+    if (channel != null) {
+        channel.setMethodCallHandler(null);
+        channel = null;
+    }
+    if (stateChannel != null) {
+        stateChannel.setStreamHandler(null);
+        stateChannel = null;
+    }
     mBluetoothAdapter = null;
   }
 
@@ -231,16 +243,21 @@ public class BluetoothPrintPlusPlugin
 
   private void state(Result result) {
     try {
-      switch (mBluetoothAdapter.getState()) {
-        case BluetoothAdapter.STATE_OFF:
-          result.success(BPPState.BlueOff.getValue());
-          break;
-        case BluetoothAdapter.STATE_ON:
-          result.success(BPPState.BlueOn.getValue());
-          break;
-        default:
-          break;
-      }
+       if (mBluetoothAdapter == null) {
+            result.error("bluetooth_unavailable", "The device does not support Bluetooth", null);
+            return;
+        }
+        switch (mBluetoothAdapter.getState()) {
+            case BluetoothAdapter.STATE_OFF:
+                result.success(BPPState.BlueOff.getValue());
+                break;
+            case BluetoothAdapter.STATE_ON:
+                result.success(BPPState.BlueOn.getValue());
+                break;
+            default:
+                result.success(BPPState.Unknown.getValue());
+                break;
+        }
     } catch (SecurityException e) {
       result.error("invalid_argument", "argument 'address' not found", null);
     }
@@ -249,29 +266,42 @@ public class BluetoothPrintPlusPlugin
   private void startScan(Result result) {
     LogUtils.i(TAG, "start scan...");
     try {
-      String[] perms = {
-          Manifest.permission.BLUETOOTH,
-          Manifest.permission.BLUETOOTH_ADMIN,
-          Manifest.permission.BLUETOOTH_CONNECT,
-          Manifest.permission.BLUETOOTH_SCAN,
-          Manifest.permission.ACCESS_FINE_LOCATION,
-      };
-      if (EasyPermissions.hasPermissions(this.context, perms)) {
-        // Already have permission, do the thing
-        startScan();
-      } else {
-        // Do not have permissions, request them now
-        EasyPermissions.requestPermissions(
-                this.activity,
-                "Bluetooth requires location permission!!!",
-                REQUEST_LOCATION_PERMISSIONS,
-                perms);
-      }
-      result.success(null);
+        String[] perms = {
+            Manifest.permission.BLUETOOTH,
+            Manifest.permission.BLUETOOTH_ADMIN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        };
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (EasyPermissions.hasPermissions(this.context, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)) {
+                startScan();
+            } else {
+                EasyPermissions.requestPermissions(
+                        this.activity,
+                        "Bluetooth requires additional permissions on Android 12+",
+                        REQUEST_LOCATION_PERMISSIONS,
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                        Manifest.permission.BLUETOOTH_SCAN
+                );
+            }
+        } else {
+            if (EasyPermissions.hasPermissions(this.context, perms)) {
+                startScan();
+            } else {
+                EasyPermissions.requestPermissions(
+                        this.activity,
+                        "Bluetooth requires location permission!",
+                        REQUEST_LOCATION_PERMISSIONS,
+                        perms);
+            }
+        }
+        result.success(null);
     } catch (Exception e) {
-      result.error("startScan", e.getMessage(), e);
+        result.error("startScan", e.getMessage(), e);
     }
-  }
+}
 
   private void invokeMethodUIThread(BluetoothDevice device) {
     final Map<String, Object> ret = new HashMap<>();
@@ -279,7 +309,7 @@ public class BluetoothPrintPlusPlugin
     ret.put("name", device.getName());
     ret.put("type", device.getType());
     new Handler(Looper.getMainLooper()).post(() -> {
-      if (!ret.isEmpty()) {
+      if (channel != null && !ret.isEmpty()) {
         channel.invokeMethod("ScanResult", ret);
       } else {
         LogUtils.w(TAG, "invokeMethodUIThread: tried to call method on closed channel: " + "ScanResult");
@@ -359,21 +389,28 @@ public class BluetoothPrintPlusPlugin
   }
 
   @Override
-  public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     LogUtils.d(TAG, "onRequestPermissionsResult");
     if (requestCode == REQUEST_LOCATION_PERMISSIONS) {
-      if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-        startScan();
-      } else {
-        if (pendingResult != null) {
-            pendingResult.error("no_permissions", "Plugin này yêu cầu quyền truy cập vị trí để quét", null);
-            pendingResult = null;
+        boolean allGranted = true;
+        for (int grantResult : grantResults) {
+            if (grantResult != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
+            }
         }
-      }
-      return true;
+        if (allGranted) {
+            startScan();
+        } else {
+            if (pendingResult != null) {
+                pendingResult.error("no_permissions", "This plugin requires Bluetooth and location permissions.", null);
+                pendingResult = null;
+            }
+        }
+        return true;
     }
     return false;
-  }
+}
 
   private final StreamHandler stateHandler = new StreamHandler() {
     // private EventSink sink;
