@@ -362,10 +362,10 @@ public class BluetoothPrintPlusPlugin
   public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
     LogUtils.d(TAG, "onRequestPermissionsResult");
     if (requestCode == REQUEST_LOCATION_PERMISSIONS) {
-      if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+      if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
         startScan();
       } else {
-        pendingResult.error("no_permissions", "this plugin requires location permissions for scanning", null);
+        pendingResult.error("no_permissions", "Plugin này yêu cầu quyền truy cập vị trí để quét", null);
         pendingResult = null;
       }
       return true;
